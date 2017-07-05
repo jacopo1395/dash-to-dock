@@ -512,6 +512,12 @@ const DockedDash = new Lang.Class({
             })
         ], [
             this._settings,
+            'changed::favorites-only-on-main',
+            Lang.bind(this, function() {
+                    this.dash.resetAppIcons();
+            })
+        ], [
+            this._settings,
             'changed::show-running',
             Lang.bind(this, function() {
                     this.dash.resetAppIcons();

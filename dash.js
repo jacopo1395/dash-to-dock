@@ -778,7 +778,11 @@ var MyDash = new Lang.Class({
         // Apps supposed to be in the dash
         let newApps = [];
 
-        if (this._dtdSettings.get_boolean('show-favorites')) {
+        let only_on_main_monitor = true;
+        if (this._dtdSettings.get_boolean('favorites-only-on-main'))
+            only_on_main_monitor = this._monitorIndex == Main.layoutManager.primaryIndex;
+
+        if (this._dtdSettings.get_boolean('show-favorites') && only_on_main_monitor) {
             for (let id in favorites)
                 newApps.push(favorites[id]);
         }
@@ -791,7 +795,7 @@ var MyDash = new Lang.Class({
                 let index = running.indexOf(oldApps[i]);
                 if (index > -1) {
                     let app = running.splice(index, 1)[0];
-                    if (this._dtdSettings.get_boolean('show-favorites') && (app.get_id() in favorites))
+                    if (this._dtdSettings.get_boolean('show-favorites') && only_on_main_monitor && (app.get_id() in favorites))
                         continue;
                     newApps.push(app);
                 }
@@ -799,7 +803,7 @@ var MyDash = new Lang.Class({
             // Second: add the new apps
             for (let i = 0; i < running.length; i++) {
                 let app = running[i];
-                if (this._dtdSettings.get_boolean('show-favorites') && (app.get_id() in favorites))
+                if (this._dtdSettings.get_boolean('show-favorites') && only_on_main_monitor && (app.get_id() in favorites))
                     continue;
                 newApps.push(app);
             }
