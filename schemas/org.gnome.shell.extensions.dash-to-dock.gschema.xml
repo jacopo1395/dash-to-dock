@@ -546,5 +546,10 @@
       <summary>Enable glossy effect</summary>
       <description>Toggle the glossy effect of the unity7 backlit feature.</description>
     </key>
+    <key name="show-previews-hover" type="b">
+      <default>false</default>
+      <summary>Show window previews on mouse hover</summary>
+      <description></description>
+    </key>
   </schema>
 </schemalist>
