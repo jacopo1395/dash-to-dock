@@ -25,6 +25,7 @@ const Workspace = imports.ui.workspace;
 const Me = imports.misc.extensionUtils.getCurrentExtension();
 const Utils = Me.imports.utils;
 const AppIcons = Me.imports.appIcons;
+const Locations = Me.imports.locations;
 
 let DASH_ANIMATION_TIME = Dash.DASH_ANIMATION_TIME;
 let DASH_ITEM_LABEL_HIDE_TIME = Dash.DASH_ITEM_LABEL_HIDE_TIME;
@@ -335,6 +336,9 @@ var MyDash = new Lang.Class({
 
         this._appSystem = Shell.AppSystem.get_default();
 
+        // Trash Icon
+        this._trash = new Locations.Trash();
+
         this._signalsHandler.add([
             this._appSystem,
             'installed-changed',
@@ -366,6 +370,10 @@ var MyDash = new Lang.Class({
             this._dtdSettings,
             'changed::show-previews-hover',
             Lang.bind(this, this._togglePreviewHover)
+        ], [
+            this._trash,
+            'changed',
+            Lang.bind(this, this._queueRedisplay)
         ]);
     },
 
@@ -833,6 +841,8 @@ var MyDash = new Lang.Class({
                 newApps.push(app);
             }
         }
+
+        newApps.push(this._trash.getApp());
 
         // Figure out the actual changes to the list of items; we iterate
         // over both the list of items currently in the dash and the list
