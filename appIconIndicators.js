@@ -308,6 +308,7 @@ const RunningIndicatorDots = new Lang.Class({
                    'custom-theme-running-dots-border-width',
                    'custom-theme-customize-running-dots',
                    'unity-backlit-items',
+                   'apply-glossy-effect',
                    'running-indicator-dominant-color'];
 
         keys.forEach(function(key) {
@@ -332,7 +333,10 @@ const RunningIndicatorDots = new Lang.Class({
 
         // Enable / Disable the backlight of running apps
         if (!this._settings.get_boolean('apply-custom-theme') && this._settings.get_boolean('unity-backlit-items')) {
-            this._source._iconContainer.get_children()[1].set_style(this._glossyBackgroundStyle);
+            if (this._settings.get_boolean('apply-glossy-effect'))
+                this._source._iconContainer.get_children()[1].set_style(this._glossyBackgroundStyle);
+            else
+                this._source._iconContainer.get_children()[1].set_style(null);
             if (this._isRunning)
                 this._enableBacklight();
             else
