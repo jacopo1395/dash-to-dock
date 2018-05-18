@@ -1951,6 +1951,7 @@ var DockManager = new Lang.Class({
      */
     disable: function() {
         for (var dock of this._allDocks) {
+            Theming.lockscreen = true;
             dock._themeManager._transparency.disable();
             lock_screen = true;
             dock._resetDepth();
@@ -1959,6 +1960,7 @@ var DockManager = new Lang.Class({
 
     enable: function() {
         for (var dock of this._allDocks) {
+            Theming.lockscreen = false;
             dock._themeManager._transparency.enable();
             lock_screen = false;
             dock._resetDepth();
