@@ -50,15 +50,15 @@ var FileManager1Client = new Lang.Class({
         ], [
             // We must additionally listen for Screen events to know when to
             // rebuild our location map when the set of available windows changes.
-            global.screen,
+            Utils.DisplayWrapper.getWorkspaceManager(),
             'workspace-switched',
             Lang.bind(this, this._updateLocationMap)
         ], [
-            global.screen,
+            Utils.DisplayWrapper.getScreen(),
             'window-entered-monitor',
             Lang.bind(this, this._updateLocationMap)
         ], [
-            global.screen,
+            Utils.DisplayWrapper.getScreen(),
             'window-left-monitor',
             Lang.bind(this, this._updateLocationMap)
         ]);
@@ -127,8 +127,8 @@ Signals.addSignalMethods(FileManager1Client.prototype);
 function getXidToWindow() {
     let xidToWindow = new Map();
 
-    for (let i = 0; i < global.screen.n_workspaces; i++) {
-        let ws = global.screen.get_workspace_by_index(i);
+    for (let i = 0; i < Utils.DisplayWrapper.getWorkspaceManager().n_workspaces; i++) {
+        let ws = Utils.DisplayWrapper.getWorkspaceManager().get_workspace_by_index(i);
         ws.list_windows().map(function(w) {
             let xid = guessWindowXID(w);
 	    if (xid != null) {
