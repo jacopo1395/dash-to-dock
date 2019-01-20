@@ -225,6 +225,7 @@ var ThemeManager = new Lang.Class({
      * Reimported back and adapted from atomdock
      */
     _adjustTheme: function() {
+        global.log("ADJUST");
         // Prevent shell crash if the actor is not on the stage.
         // It happens enabling/disabling repeatedly the extension
         if (!this._dash._container.get_stage())
@@ -287,6 +288,8 @@ var ThemeManager = new Lang.Class({
             // I do call set_style possibly twice so that only the background gets the transition.
             // The transition-property css rules seems to be unsupported
             this._dash._container.set_style(newStyle);
+
+            global.log(newStyle);
         }
 
         // Customize background
@@ -360,6 +363,7 @@ const Transparency = new Lang.Class({
     },
 
     enable: function() {
+        global.log("ENABLE");
         // ensure I never double-register/inject
         // although it should never happen
         this.disable();
@@ -368,6 +372,7 @@ const Transparency = new Lang.Class({
         if (this._base_actor_style == null) {
             this._base_actor_style= "";
         }
+        global.log(this._base_actor_style);
 
         this._signalsHandler.addWithLabel('transparency', [
             global.window_group,
@@ -567,6 +572,8 @@ const Transparency = new Lang.Class({
     _updateStyles: function() {
         this._getAlphas();
 
+        global.log("UPDATE STYLE+");
+
         this._transparent_style = this._base_actor_style +
             'background-color: rgba(' +
             this._backgroundColor + ', ' + this._transparentAlpha + ');' +
@@ -582,6 +589,9 @@ const Transparency = new Lang.Class({
             'transition-duration: ' + this._opaqueTransition + 'ms;';
 
         this.emit('styles-updated');
+
+        global.log( this._transparent_style);
+        global.log( this._opaque_style);
     },
 
     setColor: function(color) {
