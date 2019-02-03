@@ -25,6 +25,7 @@ const Workspace = imports.ui.workspace;
 const Me = imports.misc.extensionUtils.getCurrentExtension();
 const Utils = Me.imports.utils;
 const AppIcons = Me.imports.appIcons;
+const Locations = Me.imports.locations;
 
 let DASH_ANIMATION_TIME = Dash.DASH_ANIMATION_TIME;
 let DASH_ITEM_LABEL_HIDE_TIME = Dash.DASH_ITEM_LABEL_HIDE_TIME;
@@ -56,9 +57,10 @@ const MyDashActor = new Lang.Class({
     Name: 'DashToDock_MyDashActor',
     Extends: St.Widget,
 
-    _init: function(settings) {
+    _init: function(settings, monitorIndex) {
         // a prefix is required to avoid conflicting with the parent class variable
         this._dtdSettings = settings;
+        this._monitorIndex = monitorIndex;
         this._rtl = (Clutter.get_default_text_direction() == Clutter.TextDirection.RTL);
 
         this._position = Utils.getPosition(settings);
@@ -75,10 +77,33 @@ const MyDashActor = new Lang.Class({
             clip_to_allocation: true
         });
 
+
         // Since we are usually visible but not usually changing, make sure
         // most repaint requests don't actually require us to repaint anything.
         // This saves significant CPU when repainting the screen.
         this.set_offscreen_redirect(Clutter.OffscreenRedirect.ALWAYS);
+
+        this.actor._delegate = this;
+
+        // Popup menu
+        let alignment = 0.5;
+        this.menu = new PopupMenu.PopupMenu(this.actor, alignment, this._position);
+        this.menu.actor.hide();
+        let settingsMenuItem = new PopupMenu.PopupMenuItem('Dash to Dock ' + _('Settings'));
+        settingsMenuItem.connect('activate', Lang.bind(this, function() {
+            Util.spawn(['gnome-shell-extension-prefs', Me.metadata.uuid]);
+        }));
+        this.menu.addMenuItem(settingsMenuItem);
+
+        Main.uiGroup.add_actor(this.menu.actor);
+        this.menu.close();
+
+        this._menuManager = new PopupMenu.PopupMenuManager(this);
+        this._menuManager.addMenu(this.menu);
+
+        this.actor.reactive = true;
+        this.actor.connect('button-press-event', Lang.bind(this, this._rightClickMenu));
+
     },
 
     vfunc_allocate: function(box, flags) {
@@ -153,7 +178,36 @@ const MyDashActor = new Lang.Class({
         let [, showAppsButton] = this.get_children();
         let [minHeight, ] = showAppsButton.get_preferred_height(forWidth);
 
-        return [minHeight, natHeight];
+        alloc.min_size = minHeight;
+        alloc.natural_size = natHeight;
+    },
+
+    _rightClickMenu: function(actor, event) {
+        if (this.menu.isOpen) {
+            this.menu.toggle();
+            return;
+        }
+
+        let button = event.get_button();
+        if (button == 3) {
+            let [x, y] = event.get_coords();
+            let coords, offset, size;
+
+            if (this._isHorizontal) {
+                coords = x;
+                offset = (Main.layoutManager.getWorkAreaForMonitor(this._monitorIndex).width - this.actor.width)/2;
+                size = this.actor.width;
+            }
+            else {
+                coords = y;
+                offset = (Main.layoutManager.getWorkAreaForMonitor(this._monitorIndex).height - this.actor.height)/2
+                         + Main.layoutManager.getWorkAreaForMonitor(this._monitorIndex).y; // This is the offset due to the top bar
+                size = this.actor.height;
+            }
+
+            this.menu.setSourceAlignment((coords - offset) / size);
+            this.menu.toggle();
+        }
     }
 });
 
@@ -203,7 +257,8 @@ var MyDash = new Lang.Class({
         this._ensureAppIconVisibilityTimeoutId = 0;
         this._labelShowing = false;
 
-        this._container = new MyDashActor(settings);
+        this._containerObject = new MyDashActor(settings, this._monitorIndex);
+        this._container = this._containerObject.actor;
         this._scrollView = new St.ScrollView({
             name: 'dashtodockDashScrollview',
             hscrollbar_policy: Gtk.PolicyType.NEVER,
@@ -239,6 +294,16 @@ var MyDash = new Lang.Class({
         this.showAppsButton = this._showAppsIcon.toggleButton;
 
         this._container.add_actor(this._showAppsIcon);
+
+        // When opening the right click menu, deactivate reactiveness of icons.
+        this._containerObject.menu.connect('open-state-changed', Lang.bind(this, function() {
+            let reactiveness = !this._containerObject.menu.isOpen;
+            let appIcons = this.getAppIcons();
+            appIcons.forEach(function(icon) {
+                icon.actor.reactive = reactiveness;
+            });
+            showAppsIconWrapper.actor.reactive = reactiveness;
+        }));
 
         let rtl = Clutter.get_default_text_direction() == Clutter.TextDirection.RTL;
         this.actor = new St.Bin({
@@ -276,6 +341,12 @@ var MyDash = new Lang.Class({
 
         this._appSystem = Shell.AppSystem.get_default();
 
+        // Remove Drive Icons
+        this._removables = new Locations.Removables();
+
+        // Trash Icon
+        this._trash = new Locations.Trash();
+
         this._signalsHandler.add([
             this._appSystem,
             'installed-changed',
@@ -303,6 +374,18 @@ var MyDash = new Lang.Class({
             Main.overview,
             'item-drag-cancelled',
             Lang.bind(this, this._onDragCancelled)
+        ], [
+            this._dtdSettings,
+            'changed::show-previews-hover',
+            Lang.bind(this, this._togglePreviewHover)
+        ], [
+            this._trash,
+            'changed',
+            Lang.bind(this, this._queueRedisplay)
+        ], [
+            this._removables,
+            'changed',
+            Lang.bind(this, this._queueRedisplay)
         ]);
     },
 
@@ -500,6 +583,27 @@ var MyDash = new Lang.Class({
         this._hookUpLabel(item, appIcon);
 
         return item;
+    },
+
+    _togglePreviewHover: function() {
+        if (this._dtdSettings.get_boolean('show-previews-hover'))
+            this._enableHover();
+        else
+            this._disableHover();
+    },
+
+    _enableHover: function() {
+        let appIcons = this.getAppIcons();
+        appIcons.forEach(function (appIcon) {
+            appIcon.enableHover(appIcons);
+        });
+    },
+
+    _disableHover: function() {
+        let appIcons = this.getAppIcons();
+        appIcons.forEach(function (appIcon) {
+            appIcon.disableHover();
+        });
     },
 
     /**
@@ -719,7 +823,11 @@ var MyDash = new Lang.Class({
         // Apps supposed to be in the dash
         let newApps = [];
 
-        if (this._dtdSettings.get_boolean('show-favorites')) {
+        let only_on_main_monitor = true;
+        if (this._dtdSettings.get_boolean('favorites-only-on-main'))
+            only_on_main_monitor = this._monitorIndex == Main.layoutManager.primaryIndex;
+
+        if (this._dtdSettings.get_boolean('show-favorites') && only_on_main_monitor) {
             for (let id in favorites)
                 newApps.push(favorites[id]);
         }
@@ -732,7 +840,7 @@ var MyDash = new Lang.Class({
                 let index = running.indexOf(oldApps[i]);
                 if (index > -1) {
                     let app = running.splice(index, 1)[0];
-                    if (this._dtdSettings.get_boolean('show-favorites') && (app.get_id() in favorites))
+                    if (this._dtdSettings.get_boolean('show-favorites') && only_on_main_monitor && (app.get_id() in favorites))
                         continue;
                     newApps.push(app);
                 }
@@ -740,10 +848,18 @@ var MyDash = new Lang.Class({
             // Second: add the new apps
             for (let i = 0; i < running.length; i++) {
                 let app = running[i];
-                if (this._dtdSettings.get_boolean('show-favorites') && (app.get_id() in favorites))
+                if (this._dtdSettings.get_boolean('show-favorites') && only_on_main_monitor && (app.get_id() in favorites))
                     continue;
                 newApps.push(app);
             }
+        }
+
+        if (this._dtdSettings.get_boolean('show-mounts')) {
+            Array.prototype.push.apply(newApps, this._removables.getApps());
+        }
+
+        if (this._dtdSettings.get_boolean('show-trash')) {
+            newApps.push(this._trash.getApp());
         }
 
         // Figure out the actual changes to the list of items; we iterate
@@ -856,6 +972,9 @@ var MyDash = new Lang.Class({
 
         // This will update the size, and the corresponding number for each icon
         this._updateNumberOverlay();
+
+        // Connect windows previews to hover events
+        this._togglePreviewHover();
     },
 
     _updateNumberOverlay: function() {

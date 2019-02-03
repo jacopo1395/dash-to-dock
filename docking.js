@@ -46,6 +46,8 @@ const scrollAction = {
     SWITCH_WORKSPACE: 2
 };
 
+let lock_screen = false;
+
 /**
  * A simple St.Widget with one child whose allocation takes into account the
  * slide out of its child via the _slidex parameter ([0:1]).
@@ -266,6 +268,9 @@ const DockedDash = new Lang.Class({
         });
         this._box.connect('notify::hover', Lang.bind(this, this._hoverChanged));
 
+        // This is for the menu to access the settings with right-click
+        this.dash._containerObject.menu.connect('menu-closed', Lang.bind(this, this._hoverChanged))
+
         // Create and apply height constraint to the dash. It's controlled by this.actor height
         this.constrainSize = new Clutter.BindConstraint({
             source: this.actor,
@@ -359,7 +364,15 @@ const DockedDash = new Lang.Class({
                                               Lang.bind(Main.layoutManager, Main.layoutManager._queueUpdateRegions));
 
         this.dash._container.connect('allocation-changed', Lang.bind(this, this._updateStaticBox));
-        this._slider.connect(this._isHorizontal ? 'notify::x' : 'notify::y', Lang.bind(this, this._updateStaticBox));
+
+        this._slider.actor.connect(this._isHorizontal ? 'notify::x' : 'notify::y', Lang.bind(this, this._updateStaticBox));
+
+        // sync hover after a popupmenu is closed
+        this.dash.connect('menu-closed', Lang.bind(this, function() {
+            this._box.sync_hover();
+            this._hoverChanged();
+        }));
+
 
         // Load optional features that need to be activated for one dock only
         if (this._monitorIndex == this._settings.get_int('preferred-monitor'))
@@ -497,6 +510,24 @@ const DockedDash = new Lang.Class({
         ], [
             this._settings,
             'changed::show-favorites',
+            Lang.bind(this, function() {
+                    this.dash.resetAppIcons();
+            })
+        ], [
+            this._settings,
+            'changed::favorites-only-on-main',
+            Lang.bind(this, function() {
+                    this.dash.resetAppIcons();
+            })
+        ], [
+            this._settings,
+            'changed::show-trash',
+            Lang.bind(this, function() {
+                    this.dash.resetAppIcons();
+            })
+        ], [
+            this._settings,
+            'changed::show-mounts',
             Lang.bind(this, function() {
                     this.dash.resetAppIcons();
             })
@@ -677,7 +708,17 @@ const DockedDash = new Lang.Class({
     },
 
     _hoverChanged: function() {
-        if (!this._ignoreHover) {
+        if (this.dash._containerObject.menu.isOpen) {
+            return;
+        }
+
+        let dontClose = false;
+        this.dash.getAppIcons().forEach(function(appIcon) {
+            if (appIcon._previewMenu && appIcon._previewMenu.isOpen)
+                dontClose = true;
+        });
+
+        if (!this._ignoreHover && !dontClose) {
             // Skip if dock is not in autohide mode for instance because it is shown
             // by intellihide.
             if (this._autohideIsEnabled) {
@@ -1104,6 +1145,10 @@ const DockedDash = new Lang.Class({
 
     // Set the dash at the correct depth in z
     _resetDepth: function() {
+        if (lock_screen) {
+            Main.layoutManager.uiGroup.set_child_below_sibling(this.actor, null);
+            return;
+        }
         // Keep the dash below the modalDialogGroup and the legacyTray
         if (Main.legacyTray && Main.legacyTray.actor)
             Main.layoutManager.uiGroup.set_child_below_sibling(this.actor, Main.legacyTray.actor);
@@ -1163,7 +1208,7 @@ const DockedDash = new Lang.Class({
     _onDragStart: function() {
         // The dash need to be above the top_window_group, otherwise it doesn't
         // accept dnd of app icons when not in overiew mode.
-        Main.layoutManager.uiGroup.set_child_above_sibling(this.actor, global.top_window_group);
+        Main.layoutManager.uiGroup.set_child_above_sibling(this.actor, lock_screen ? null : global.top_window_group);
         this._oldignoreHover = this._ignoreHover;
         this._ignoreHover = true;
         this._animateIn(this._settings.get_double('animation-time'), 0);
@@ -1897,6 +1942,29 @@ var DockManager = new Lang.Class({
         this._revertPanelCorners();
         this._restoreDash();
         this._remoteModel.destroy();
+    },
+
+    /**
+     * These functions simply hide/show the dock, so that it doesn't show on the
+     * lockscreen. The idea is to *not* disable the extension, but simply hide
+     * it. This wasy, there is no need to re-enable it upon unlocking the screen.
+     */
+    disable: function() {
+        for (var dock of this._allDocks) {
+            Theming.lockscreen = true;
+            dock._themeManager._transparency.disable();
+            lock_screen = true;
+            dock._resetDepth();
+        }
+    },
+
+    enable: function() {
+        for (var dock of this._allDocks) {
+            Theming.lockscreen = false;
+            dock._themeManager._transparency.enable();
+            lock_screen = false;
+            dock._resetDepth();
+        }
     },
 
     /**
